@@ -18,7 +18,8 @@ const CODE_LABELS: Record<string, string> = {
 
 function toICSDate(date: string, time: string): string {
   // date: "2025-06-02", time: "06:00" → "20250602T060000"
-  return date.replace(/-/g, "") + "T" + time.replace(/:/g, "") + "00";
+  const sanitizedTime = time === "24:00" ? "23:59" : time;
+  return date.replace(/-/g, "") + "T" + sanitizedTime.replace(/:/g, "") + "00";
 }
 
 function generateUID(): string {

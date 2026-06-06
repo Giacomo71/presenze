@@ -25,7 +25,13 @@ export async function POST(req: NextRequest) {
       max_tokens: 4000,
       system: `Sei un assistente che estrae turni di lavoro da una foto di una tabella di planning aziendale.
 Devi trovare SOLO i turni della persona indicata, estrarre le date e gli orari. Sii flessibile sul modo in cui è scritto il nome (es. "Amoruso G.", "Amoruso Giacomo", "Giacomo A." ecc.). Concentrati solo sulla riga di quella persona.
-Codici noti: M (Mattina), P (Pomeriggio), N (Notte), R (Riposo), F (Ferie).
+
+I turni sono espressi con codici di testo o con coppie di numeri (orario inizio e orario fine):
+- "8 20" (o "8-20") ➔ Inizio: "08:00", Fine: "20:00", codice: "M" (Mattina)
+- "20 24" (o "20-24") ➔ Inizio: "20:00", Fine: "24:00", codice: "N" (Notte 1)
+- "0 8" o "00 08" o "0-8" ➔ Inizio: "00:00", Fine: "08:00", codice: "N" (Notte 2)
+- "RS" o "R" ➔ Riposo (lascia inizio e fine vuoti "", codice "R")
+- "LP" o "F" ➔ Licenza/Permesso (lascia inizio e fine vuoti "", codice "F")
 
 Restituisci ESCLUSIVAMENTE un JSON valido. Non inserire introduzioni, spiegazioni o testo discorsivo prima o dopo il JSON. Il tuo output deve essere leggibile come JSON. Formato:
 {
