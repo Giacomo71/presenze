@@ -46,7 +46,9 @@ Restituisci ESCLUSIVAMENTE un JSON valido. Non inserire introduzioni, spiegazion
           content: [
             {
               type: "text",
-              text: `Cerca la riga relativa a: "${targetName}" (o varianti simili). Anno corrente: ${new Date().getFullYear()}. Estrai solo i suoi turni e restituisci ESCLUSIVAMENTE il JSON con i turni. Non aggiungere testo discorsivo.`
+              text: `Cerca la riga relativa a: "${targetName}" (ad esempio "AMORUSO G.", "G. AMORUSO", "AMORUSO GIAC.").
+IMPORTANTE: NON confonderlo con altre persone aventi lo stesso cognome ma nome diverso come "M.A. AMORUSO" o "AMORUSO M.A." (che sono persone diverse e NON devono essere estratte).
+Anno corrente: ${new Date().getFullYear()}. Estrai solo i turni di "${targetName}" e restituisci ESCLUSIVAMENTE il JSON con i turni. Non aggiungere testo discorsivo.`
             },
             {
               type: "image",
