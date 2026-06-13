@@ -1,7 +1,8 @@
 "use client";
 
-import { Upload, Loader2, X, CheckCircle2, Download } from "lucide-react";
+import { Upload, Loader2, X, CheckCircle2, Download, Plus, Settings2 } from "lucide-react";
 import { useState } from "react";
+import { useSession } from "next-auth/react";
 
 function todayInItalian() {
   const formatter = new Intl.DateTimeFormat("it-IT", {
@@ -22,12 +23,32 @@ type Shift = {
   note: string;
 };
 
-export function Greeting() {
+type GreetingProps = {
+  targetName: string;
+  calendarId: string;
+  onExtractionComplete: (shifts: Shift[], fileName: string, warnings: string[]) => void;
+  onShiftsSaved: (shifts: Shift[], destination: "google" | "ics") => void;
+  onOpenSettings: () => void;
+};
+
+export function Greeting({
+  targetName,
+  calendarId,
+  onExtractionComplete,
+  onShiftsSaved,
+  onOpenSettings,
+}: GreetingProps) {
+  const { data: session } = useSession();
   const [isExtracting, setIsExtracting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [extractedShifts, setExtractedShifts] = useState<Shift[] | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [saveResult, setSaveResult] = useState<{ message: string; success: boolean } | null>(null);
+  const [extractionError, setExtractionError] = useState<string | null>(null);
+
+  const displayGreetingName = session?.user?.name
+    ? session.user.name.split(" ")[0]
+    : (targetName.split(" ").find(n => n.length > 2) || "Giacomo");
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -36,10 +57,11 @@ export function Greeting() {
     try {
       setIsExtracting(true);
       setSaveResult(null);
+      setExtractionError(null);
 
       const formData = new FormData();
       formData.append("image", file);
-      formData.append("targetName", "Amoruso Giacomo");
+      formData.append("targetName", targetName);
 
       const res = await fetch("/api/extract", {
         method: "POST",
@@ -53,11 +75,17 @@ export function Greeting() {
 
       const data = await res.json();
       console.log("Extract API response:", data);
-      setExtractedShifts(data.shifts || []);
-      setWarnings(data.warnings || []);
+      const shifts = data.shifts || [];
+      const warnList = data.warnings || [];
+      
+      setExtractedShifts(shifts);
+      setWarnings(warnList);
+      
+      // Notify parent about successful extraction (adds card to board)
+      onExtractionComplete(shifts, file.name, warnList);
     } catch (err: any) {
       console.error("Extraction error:", err);
-      alert("Errore durante l'estrazione:\n" + err.message);
+      setExtractionError(err.message || "Errore sconosciuto durante l'estrazione.");
     } finally {
       setIsExtracting(false);
       e.target.value = "";
@@ -69,14 +97,15 @@ export function Greeting() {
 
     try {
       setIsSaving(true);
+      setSaveResult(null);
       const res = await fetch("/api/calendar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shifts: extractedShifts }),
+        body: JSON.stringify({ shifts: extractedShifts, destination: "ics" }),
       });
 
       if (!res.ok) {
-        const errData = await res.json();
+        const errData = await res.json().catch(() => ({ error: "Errore scaricamento file .ics" }));
         throw new Error(errData.error || "Errore sconosciuto");
       }
 
@@ -92,9 +121,12 @@ export function Greeting() {
       URL.revokeObjectURL(url);
 
       setSaveResult({
-        message: `File .ics scaricato con ${extractedShifts.length} eventi! Aprilo per importarli in Google Calendar.`,
+        message: `File .ics scaricato con successo (${extractedShifts.length} eventi)! Aprilo per importarli nel calendario.`,
         success: true,
       });
+
+      // Save shifts history locally in the parent
+      onShiftsSaved(extractedShifts, "ics");
     } catch (err: any) {
       setSaveResult({ message: err.message, success: false });
     } finally {
@@ -102,13 +134,100 @@ export function Greeting() {
     }
   };
 
+  const handleSyncGoogleCalendar = async () => {
+    if (!extractedShifts || extractedShifts.length === 0) return;
+
+    try {
+      setIsSaving(true);
+      setSaveResult(null);
+
+      const res = await fetch("/api/calendar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          shifts: extractedShifts,
+          destination: "google",
+          calendarId: calendarId,
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({ error: "Errore di sincronizzazione" }));
+        throw new Error(errData.error || "Sincronizzazione non riuscita.");
+      }
+
+      const data = await res.json();
+      setSaveResult({
+        message: `Sincronizzazione completata! Creati ${data.createdCount} eventi, skippati ${data.skippedCount} duplicati esistenti.`,
+        success: true,
+      });
+
+      // Save shifts history locally in the parent
+      onShiftsSaved(extractedShifts, "google");
+    } catch (err: any) {
+      setSaveResult({ message: err.message, success: false });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const updateShift = (idx: number, field: keyof Shift, value: string) => {
+    if (!extractedShifts) return;
+    const updated = [...extractedShifts];
+    updated[idx] = { ...updated[idx], [field]: value };
+    setExtractedShifts(updated);
+  };
+
+  const updateShiftCode = (idx: number, code: string) => {
+    if (!extractedShifts) return;
+    const updated = [...extractedShifts];
+    let start = "";
+    let end = "";
+    if (code === "M") {
+      start = "08:00";
+      end = "20:00";
+    } else if (code === "N") {
+      start = "20:00";
+      end = "08:00";
+    }
+    updated[idx] = { ...updated[idx], code, start, end };
+    setExtractedShifts(updated);
+  };
+
+  const handleDeleteRow = (idx: number) => {
+    if (!extractedShifts) return;
+    const updated = [...extractedShifts];
+    updated.splice(idx, 1);
+    setExtractedShifts(updated);
+  };
+
+  const handleAddRow = () => {
+    const newShift: Shift = {
+      date: new Date().toISOString().split("T")[0],
+      start: "08:00",
+      end: "20:00",
+      code: "M",
+      note: "",
+    };
+    setExtractedShifts([...(extractedShifts || []), newShift]);
+  };
+
   return (
     <>
       <div className="flex flex-wrap items-end justify-between gap-4 p-2">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-white drop-shadow-sm">
-            Ciao, <span className="text-gradient">Giacomo</span>
-          </h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold tracking-tight text-white drop-shadow-sm">
+              Ciao, <span className="text-gradient">{displayGreetingName}</span>
+            </h1>
+            <button
+              onClick={onOpenSettings}
+              className="p-1.5 rounded-lg border border-slate-700 bg-slate-800/30 text-slate-400 hover:text-white transition-colors"
+              title="Apri Impostazioni"
+            >
+              <Settings2 className="h-4.5 w-4.5" />
+            </button>
+          </div>
           <p className="mt-1.5 text-sm font-medium text-slate-400">{todayInItalian()}</p>
         </div>
         <div>
@@ -136,15 +255,28 @@ export function Greeting() {
         </div>
       </div>
 
+      {/* Extraction error inline notification */}
+      {extractionError && (
+        <div className="mt-4 p-4 rounded-xl border bg-red-500/10 border-red-500/20 text-red-300 flex items-center justify-between shadow-lg">
+          <span className="text-sm font-medium">{extractionError}</span>
+          <button
+            onClick={() => setExtractionError(null)}
+            className="p-1.5 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+          >
+            <X className="h-4.5 w-4.5" />
+          </button>
+        </div>
+      )}
+
       {/* Modal Anteprima */}
       {extractedShifts !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/50">
               <h2 className="text-xl font-bold text-white flex items-center gap-2">
                 <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                Anteprima Estrazione
+                Anteprima ed Modifica Turni
               </h2>
               <button
                 onClick={() => {
@@ -186,69 +318,153 @@ export function Greeting() {
               )}
 
               {extractedShifts.length === 0 ? (
-                <div className="text-center py-12 text-slate-400">
-                  Nessun turno trovato per &quot;Amoruso Giacomo&quot; nell&apos;immagine fornita.
+                <div className="text-center py-12 text-slate-400 space-y-4">
+                  <div>Nessun turno trovato per &quot;{targetName}&quot; nell&apos;immagine fornita.</div>
+                  <button
+                    type="button"
+                    onClick={handleAddRow}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-primary hover:bg-primary/95 text-white"
+                  >
+                    <Plus className="h-4 w-4" /> Aggiungi riga manuale
+                  </button>
                 </div>
               ) : (
-                <div className="border border-slate-700 rounded-xl overflow-hidden">
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-800/50 text-slate-300">
-                      <tr>
-                        <th className="px-4 py-3 font-semibold">Data</th>
-                        <th className="px-4 py-3 font-semibold">Turno</th>
-                        <th className="px-4 py-3 font-semibold">Inizio</th>
-                        <th className="px-4 py-3 font-semibold">Fine</th>
-                        <th className="px-4 py-3 font-semibold">Note</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-700/50">
-                      {extractedShifts.map((shift, idx) => (
-                        <tr
-                          key={idx}
-                          className="bg-slate-900/30 hover:bg-slate-800/50 transition-colors"
-                        >
-                          <td className="px-4 py-3 text-slate-300">{shift.date}</td>
-                          <td className="px-4 py-3">
-                            <span className="inline-flex items-center justify-center h-6 w-6 rounded-md bg-primary/20 text-primary text-xs font-bold border border-primary/30">
-                              {shift.code || "-"}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-slate-400">{shift.start || "--:--"}</td>
-                          <td className="px-4 py-3 text-slate-400">{shift.end || "--:--"}</td>
-                          <td className="px-4 py-3 text-slate-500 text-xs">{shift.note || "-"}</td>
+                <div className="space-y-4">
+                  <div className="border border-slate-700 rounded-xl overflow-hidden bg-slate-950/20">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-slate-800/50 text-slate-300 border-b border-slate-700">
+                        <tr>
+                          <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wider">Data</th>
+                          <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wider w-36">Codice Turno</th>
+                          <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wider w-28 text-center">Inizio</th>
+                          <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wider w-28 text-center">Fine</th>
+                          <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wider">Note</th>
+                          <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wider w-12 text-center">Elimina</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800">
+                        {extractedShifts.map((shift, idx) => (
+                          <tr
+                            key={idx}
+                            className="bg-slate-900/30 hover:bg-slate-800/30 transition-colors"
+                          >
+                            {/* Date input */}
+                            <td className="px-3 py-2">
+                              <input
+                                type="date"
+                                value={shift.date}
+                                onChange={(e) => updateShift(idx, "date", e.target.value)}
+                                className="bg-transparent border-none outline-none focus:ring-1 focus:ring-primary/50 focus:bg-slate-900/80 rounded px-2 py-1 text-slate-200 text-sm w-full transition-all"
+                              />
+                            </td>
+                            {/* Code select dropdown */}
+                            <td className="px-3 py-2">
+                              <select
+                                value={shift.code}
+                                onChange={(e) => updateShiftCode(idx, e.target.value)}
+                                className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1 text-slate-300 text-xs font-semibold focus:ring-1 focus:ring-primary/50 outline-none"
+                              >
+                                <option value="M">M (Mattina 08-20)</option>
+                                <option value="N">N (Notte 20-08)</option>
+                                <option value="R">R (Riposo)</option>
+                                <option value="F">F (Ferie)</option>
+                              </select>
+                            </td>
+                            {/* Start time input */}
+                            <td className="px-3 py-2">
+                              <input
+                                type="text"
+                                value={shift.start || ""}
+                                onChange={(e) => updateShift(idx, "start", e.target.value)}
+                                placeholder="HH:MM"
+                                className="bg-transparent border-none outline-none focus:ring-1 focus:ring-primary/50 focus:bg-slate-900/80 rounded px-2 py-1 text-slate-200 text-sm w-full text-center font-mono transition-all"
+                              />
+                            </td>
+                            {/* End time input */}
+                            <td className="px-3 py-2">
+                              <input
+                                type="text"
+                                value={shift.end || ""}
+                                onChange={(e) => updateShift(idx, "end", e.target.value)}
+                                placeholder="HH:MM"
+                                className="bg-transparent border-none outline-none focus:ring-1 focus:ring-primary/50 focus:bg-slate-900/80 rounded px-2 py-1 text-slate-200 text-sm w-full text-center font-mono transition-all"
+                              />
+                            </td>
+                            {/* Note input */}
+                            <td className="px-3 py-2">
+                              <input
+                                type="text"
+                                value={shift.note || ""}
+                                onChange={(e) => updateShift(idx, "note", e.target.value)}
+                                placeholder="Aggiungi nota..."
+                                className="bg-transparent border-none outline-none focus:ring-1 focus:ring-primary/50 focus:bg-slate-900/80 rounded px-2 py-1 text-slate-400 text-xs w-full transition-all"
+                              />
+                            </td>
+                            {/* Delete button */}
+                            <td className="px-3 py-2 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteRow(idx)}
+                                className="p-1 rounded-lg hover:bg-red-500/10 text-slate-500 hover:text-red-400 transition-colors"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="flex justify-start">
+                    <button
+                      type="button"
+                      onClick={handleAddRow}
+                      className="inline-flex items-center gap-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Aggiungi riga
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-4 bg-slate-800/30 border-t border-slate-800 flex justify-end gap-3">
+            <div className="px-6 py-4 bg-slate-800/30 border-t border-slate-800 flex justify-end gap-3 flex-wrap">
               <button
                 onClick={() => {
                   setExtractedShifts(null);
                   setSaveResult(null);
                 }}
-                className="px-5 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
+                className="px-5 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
               >
-                Annulla
+                Chiudi
               </button>
+
               <button
                 onClick={handleDownloadICS}
+                className="px-5 py-2.5 rounded-lg text-sm font-medium border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 transition-all disabled:opacity-50"
+                disabled={extractedShifts.length === 0 || isSaving || saveResult?.success === true}
+              >
+                <Download className="mr-2 h-4 w-4 inline" />
+                Scarica file .ics
+              </button>
+
+              <button
+                onClick={handleSyncGoogleCalendar}
                 className="px-5 py-2.5 rounded-lg text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/20 transition-all hover:scale-105 disabled:opacity-50 disabled:pointer-events-none"
                 disabled={extractedShifts.length === 0 || isSaving || saveResult?.success === true}
               >
                 {isSaving ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin inline" />
-                    Generando file...
+                    Sincronizzazione in corso...
                   </>
                 ) : (
                   <>
-                    <Download className="mr-2 h-4 w-4 inline" />
-                    Scarica {extractedShifts.length} eventi (.ics)
+                    <CheckCircle2 className="mr-2 h-4 w-4 inline" />
+                    Sincronizza Google Calendar
                   </>
                 )}
               </button>

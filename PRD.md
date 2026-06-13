@@ -284,7 +284,7 @@ Codici turno conosciuti:
 
 - N → 20:00–08:00 (notte, sconfina al giorno successivo)
 - R → riposo (NON creare evento)
-- F → ferie (crea evento "Ferie" tutto il giorno)
+- **LP-LPP-LO** → ferie (crea evento "Ferie" tutto il giorno)
 
 Restituisci SOLO JSON valido con questa struttura:
 {
@@ -293,7 +293,7 @@ Restituisci SOLO JSON valido con questa struttura:
       "date": "YYYY-MM-DD",
       "start": "HH:MM" | null,    // null se riposo/ferie
       "end":   "HH:MM" | null,
-      "code":  "M"|"P"|"N"|"R"|"F"|"altro",
+      "code":  "M"|"N"|"R"|"F"|"altro",
       "note":  "stringa libera o vuota"
     }
   ],

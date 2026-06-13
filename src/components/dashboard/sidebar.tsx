@@ -12,11 +12,14 @@ import {
   Clock,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { useSession, signOut } from "next-auth/react";
+import Image from "next/image";
 
 type NavItem = {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   active?: boolean;
+  onClick?: () => void;
 };
 
 type NavSection = {
@@ -24,48 +27,77 @@ type NavSection = {
   items: NavItem[];
 };
 
-const sections: NavSection[] = [
-  {
-    title: "Menu principale",
-    items: [
-      { label: "Dashboard", icon: LayoutDashboard, active: true },
-      { label: "Carica turni", icon: Upload },
-      { label: "Anteprima", icon: ListChecks },
-      { label: "Cronologia", icon: History },
-      { label: "Calendario", icon: CalendarDays },
-    ],
-  },
-  {
-    title: "Configurazione",
-    items: [
-      { label: "Codici turno", icon: Clock },
-      { label: "Account Google", icon: Check },
-    ],
-  },
-  {
-    title: "Aiuto",
-    items: [
-      { label: "Impostazioni", icon: Settings },
-      { label: "Supporto", icon: LifeBuoy },
-    ],
-  },
-];
+type SidebarProps = {
+  onOpenSettings: () => void;
+};
 
-export function Sidebar() {
+export function Sidebar({ onOpenSettings }: SidebarProps) {
+  const { data: session } = useSession();
+
+  const userEmail = session?.user?.email || "amoruso.giacomo@gmail.com";
+  const userName = session?.user?.name || "Giacomo Amoruso";
+  const userImage = session?.user?.image || "";
+
+  // Helper to extract initials
+  const initials = userName
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .substring(0, 2)
+    .toUpperCase() || "GA";
+
+  const sections: NavSection[] = [
+    {
+      title: "Menu principale",
+      items: [
+        { label: "Dashboard", icon: LayoutDashboard, active: true },
+        { label: "Carica turni", icon: Upload },
+        { label: "Anteprima", icon: ListChecks },
+        { label: "Cronologia", icon: History },
+        { label: "Calendario", icon: CalendarDays },
+      ],
+    },
+    {
+      title: "Configurazione",
+      items: [
+        { label: "Codici turno", icon: Clock },
+        { label: "Account Google", icon: Check },
+      ],
+    },
+    {
+      title: "Aiuto",
+      items: [
+        { label: "Impostazioni", icon: Settings, onClick: onOpenSettings },
+        { label: "Supporto", icon: LifeBuoy },
+      ],
+    },
+  ];
+
   return (
     <aside className="hidden lg:flex w-64 shrink-0 flex-col m-4 rounded-2xl glass-card overflow-hidden">
       <div className="flex items-center gap-3 border-b border-slate-700/50 px-5 py-4">
-        <Avatar className="h-10 w-10 ring-2 ring-primary/30">
-          <AvatarFallback className="bg-primary/20 text-primary font-semibold">
-            GA
-          </AvatarFallback>
+        <Avatar className="h-10 w-10 ring-2 ring-primary/30 relative overflow-hidden">
+          {userImage ? (
+            <Image
+              src={userImage}
+              alt={userName}
+              fill
+              sizes="40px"
+              className="object-cover"
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <AvatarFallback className="bg-primary/20 text-primary font-semibold">
+              {initials}
+            </AvatarFallback>
+          )}
         </Avatar>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-white">
-            Giacomo Amoruso
+            {userName}
           </p>
           <p className="truncate text-xs text-slate-400">
-            amoruso.giacomo@gmail.com
+            {userEmail}
           </p>
         </div>
         <ChevronDown className="h-4 w-4 text-slate-500" />
@@ -82,17 +114,17 @@ export function Sidebar() {
                 const Icon = item.icon;
                 return (
                   <li key={item.label}>
-                    <a
-                      href="#"
+                    <button
+                      onClick={item.onClick}
                       className={
                         item.active
-                          ? "flex items-center gap-3 rounded-lg bg-primary/20 px-3 py-2.5 text-sm font-semibold text-primary transition-colors"
-                          : "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 transition-colors"
+                          ? "w-full flex items-center gap-3 rounded-lg bg-primary/20 px-3 py-2.5 text-sm font-semibold text-primary transition-colors text-left"
+                          : "w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 transition-colors text-left"
                       }
                     >
                       <Icon className="h-4 w-4" />
                       {item.label}
-                    </a>
+                    </button>
                   </li>
                 );
               })}
@@ -101,13 +133,13 @@ export function Sidebar() {
         ))}
 
         <div className="mt-2 border-t border-slate-700/50 pt-3">
-          <a
-            href="#"
-            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-400 hover:bg-rose-500/10 hover:text-rose-400 transition-colors"
+          <button
+            onClick={() => signOut()}
+            className="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-400 hover:bg-rose-500/10 hover:text-rose-400 transition-colors text-left"
           >
             <LogOut className="h-4 w-4" />
             Log Out
-          </a>
+          </button>
         </div>
       </nav>
 
