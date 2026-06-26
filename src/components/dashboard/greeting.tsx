@@ -45,9 +45,7 @@ export function Greeting({
   const [saveResult, setSaveResult] = useState<{ message: string; success: boolean } | null>(null);
   const [extractionError, setExtractionError] = useState<string | null>(null);
 
-  const displayGreetingName = session?.user?.name
-    ? session.user.name.split(" ")[0]
-    : (targetName.split(" ").find(n => n.length > 2) || "Giacomo");
+  const displayGreetingName = "Giacomo";
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
