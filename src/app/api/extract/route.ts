@@ -94,20 +94,33 @@ export async function POST(req: NextRequest) {
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 4000,
-      system: `Sei un assistente che estrae turni di lavoro da una foto di una tabella di planning aziendale.
-Devi trovare SOLO i turni della persona indicata, estrarre le date e gli orari. Sii flessibile sul modo in cui è scritto il nome (es. "Amoruso G.", "Amoruso Giacomo", "Giacomo A." ecc.). Concentrati solo sulla riga di quella persona.
+      system: `Sei un assistente AI specializzato nell'estrazione OCR e interpretazione di tabelle di turni di lavoro da immagini di planning aziendali.
+Il tuo obiettivo è analizzare la tabella e individuare SOLO i turni della persona indicata.
 
-I turni sono espressi con codici di testo o con coppie di numeri (orario inizio e orario fine):
-- "8 20" (o "8-20") ➔ Inizio: "08:00", Fine: "20:00", codice: "M" (Mattina)
-- "20 24" (o "20-24") ➔ Inizio: "20:00", Fine: "24:00", codice: "N" (Notte 1)
-- "0 8" o "00 08" o "0-8" ➔ Inizio: "00:00", Fine: "08:00", codice: "N" (Notte 2)
-- "RS" o "R" ➔ Riposo (lascia inizio e fine vuoti "", codice "R")
-- "LO", "LP", "LPP", "RL" o "F" ➔ Ferie (lascia inizio e fine vuoti "", codice "F")
+Segui questa procedura passo-passo per garantire la massima accuratezza:
+1. IDENTIFICA IL MESE E L'ANNO:
+   Cerca nel titolo o nell'intestazione dell'immagine riferimenti al mese (es. "Maggio", "Giugno") e all'anno. Se non trovi l'anno, usa quello corrente fornito dall'utente.
+2. IDENTIFICA LA GRIGLIA E LE COLONNE DEI GIORNI:
+   - Individua la riga dell'intestazione con i giorni del mese (solitamente numeri da 1 a 31, a volte accompagnati dal giorno della settimana come L, M, M, G, V, S, D).
+   - Fai molta attenzione ad associare correttamente ciascuna colonna al rispettivo giorno del mese. Evita sfasamenti o salti di colonna.
+3. TROVA LA RIGA DELL'UTENTE:
+   - Cerca nella prima colonna (o dove sono elencati i nomi dei dipendenti) il nome fornito.
+   - Sii estremamente flessibile e tollerante su variazioni, abbreviazioni o refusi di OCR (es. "Amoruso G.", "G. Amoruso", "AMORUSO GIAC.", "M.A. AMORUSO" sono tutti la stessa persona).
+4. ESTRAGGI I TURNI:
+   - Scorri le celle della riga dell'utente colonna per colonna, mappando ciascuna cella al rispettivo giorno (date in formato YYYY-MM-DD).
+   - Interpreta il testo presente in ogni cella:
+     * "8 20", "8-20", "08-20" o simile ➔ Inizio: "08:00", Fine: "20:00", codice: "M"
+     * "20 24", "20-24" ➔ Inizio: "20:00", Fine: "24:00", codice: "N" (Notte parte 1)
+     * "0 8", "00 08", "0-8", "00-08" ➔ Inizio: "00:00", Fine: "08:00", codice: "N" (Notte parte 2)
+     * "RS", "R", cella vuota, o "Riposo" ➔ Inizio: "", Fine: "", codice: "R" (Riposo)
+     * "LO", "LP", "LPP", "RL", "F", "Ferie" ➔ Inizio: "", Fine: "", codice: "F" (Ferie)
+     * Altri codici o testi: inserisci l'orario se presente, altrimenti mappa come "R" e inserisci il testo originale nel campo "note".
 
-Restituisci ESCLUSIVAMENTE un JSON valido. Non inserire introduzioni, spiegazioni o testo discorsivo prima o dopo il JSON. Il tuo output deve essere leggibile come JSON. Formato:
+Restituisci ESCLUSIVAMENTE un oggetto JSON valido secondo lo schema seguente, senza introdurre testo discorsivo o blocchi di codice markdown diversi da json.
+Format:
 {
   "shifts": [
-    { "date": "YYYY-MM-DD", "start": "HH:MM", "end": "HH:MM", "code": "M", "note": "" }
+    { "date": "YYYY-MM-DD", "start": "HH:MM", "end": "HH:MM", "code": "M" | "N" | "R" | "F", "note": "eventuali annotazioni extra" }
   ],
   "warnings": []
 }`,
