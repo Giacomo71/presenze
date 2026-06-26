@@ -41,7 +41,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps = {}) {
   const pathname = usePathname();
 
   const userEmail = session?.user?.email || "amoruso.giacomo@gmail.com";
-  const userName = session?.user?.name || "Giacomo Amoruso";
+  const userName = "Giacomo Amoruso";
   const userImage = session?.user?.image || "";
 
   // Helper to extract initials
