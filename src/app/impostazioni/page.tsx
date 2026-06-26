@@ -101,18 +101,20 @@ export default function ImpostazioniPage() {
   const [isRulesSectionOpen, setIsRulesSectionOpen] = useState(false);
   const [expandedRule, setExpandedRule] = useState<string | null>(null);
   
-  const [targetName, setTargetName] = useState("Amoruso Giacomo");
+  const [targetName, setTargetName] = useState("Giacomo");
   const [calendarId, setCalendarId] = useState("primary");
   const [feedUrl, setFeedUrl] = useState("");
   const [isCopied, setIsCopied] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
 
   useEffect(() => {
-    const storedTargetName = localStorage.getItem("targetName");
+    // Always force Giacomo, overriding any old value (e.g. "RAD71")
+    localStorage.setItem("targetName", "Giacomo");
+    setTargetName("Giacomo");
     const storedCalendarId = localStorage.getItem("calendarId");
     
-    if (storedTargetName) setTargetName(storedTargetName);
     if (storedCalendarId) setCalendarId(storedCalendarId);
+
     
     // Fetch feedUrl from server
     fetch("/api/calendar")

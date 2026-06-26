@@ -93,18 +93,19 @@ export function DashboardClient() {
   const [savedShifts, setSavedShifts] = useState<Shift[]>([]);
   const [extractions, setExtractions] = useState<ExtractionCard[]>([]);
   const [photoCount, setPhotoCount] = useState(7);
-  const [targetName, setTargetName] = useState("Amoruso Giacomo");
+  const [targetName, setTargetName] = useState("Giacomo");
   const [calendarId, setCalendarId] = useState("primary");
   const [feedUrl, setFeedUrl] = useState("");
 
   useEffect(() => {
-    const storedTargetName = localStorage.getItem("targetName");
+    // Always reset targetName to Giacomo (overrides any old stored value like "RAD71")
+    localStorage.setItem("targetName", "Giacomo");
+    setTargetName("Giacomo");
     const storedCalendarId = localStorage.getItem("calendarId");
     const storedPhotoCount = localStorage.getItem("photoCount");
     const storedShifts = localStorage.getItem("savedShifts");
     const storedExtractions = localStorage.getItem("extractions");
 
-    if (storedTargetName) setTargetName(storedTargetName);
     if (storedCalendarId) setCalendarId(storedCalendarId);
     if (storedPhotoCount) setPhotoCount(Number(storedPhotoCount));
 
