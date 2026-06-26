@@ -3,6 +3,7 @@
 import { Upload, Loader2, X, CheckCircle2, Download, Plus, Settings2 } from "lucide-react";
 import { useState } from "react";
 import { useSession } from "next-auth/react";
+import Link from "next/link";
 
 function todayInItalian() {
   const formatter = new Intl.DateTimeFormat("it-IT", {
@@ -28,7 +29,6 @@ type GreetingProps = {
   calendarId: string;
   onExtractionComplete: (shifts: Shift[], fileName: string, warnings: string[]) => void;
   onShiftsSaved: (shifts: Shift[], destination: "google" | "ics") => void;
-  onOpenSettings: () => void;
 };
 
 export function Greeting({
@@ -36,7 +36,6 @@ export function Greeting({
   calendarId,
   onExtractionComplete,
   onShiftsSaved,
-  onOpenSettings,
 }: GreetingProps) {
   const { data: session } = useSession();
   const [isExtracting, setIsExtracting] = useState(false);
@@ -220,13 +219,13 @@ export function Greeting({
             <h1 className="text-3xl font-bold tracking-tight text-white drop-shadow-sm">
               Ciao, <span className="text-gradient">{displayGreetingName}</span>
             </h1>
-            <button
-              onClick={onOpenSettings}
+            <Link
+              href="/impostazioni"
               className="p-1.5 rounded-lg border border-slate-700 bg-slate-800/30 text-slate-400 hover:text-white transition-colors"
               title="Apri Impostazioni"
             >
               <Settings2 className="h-4.5 w-4.5" />
-            </button>
+            </Link>
           </div>
           <p className="mt-1.5 text-sm font-medium text-slate-400">{todayInItalian()}</p>
         </div>

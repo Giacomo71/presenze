@@ -1,3 +1,5 @@
+"use client";
+
 import {
   LayoutDashboard,
   Upload,
@@ -10,7 +12,10 @@ import {
   ChevronDown,
   Check,
   Clock,
+  BookOpen,
 } from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useSession, signOut } from "next-auth/react";
 import Image from "next/image";
@@ -18,7 +23,7 @@ import Image from "next/image";
 type NavItem = {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
-  active?: boolean;
+  href?: string;
   onClick?: () => void;
 };
 
@@ -28,33 +33,35 @@ type NavSection = {
 };
 
 type SidebarProps = {
-  onOpenSettings: () => void;
+  onOpenSettings?: () => void;
 };
 
-export function Sidebar({ onOpenSettings }: SidebarProps) {
+export function Sidebar({ onOpenSettings }: SidebarProps = {}) {
   const { data: session } = useSession();
+  const pathname = usePathname();
 
   const userEmail = session?.user?.email || "amoruso.giacomo@gmail.com";
   const userName = session?.user?.name || "Giacomo Amoruso";
   const userImage = session?.user?.image || "";
 
   // Helper to extract initials
-  const initials = userName
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .substring(0, 2)
-    .toUpperCase() || "GA";
+  const initials =
+    userName
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .substring(0, 2)
+      .toUpperCase() || "GA";
 
   const sections: NavSection[] = [
     {
       title: "Menu principale",
       items: [
-        { label: "Dashboard", icon: LayoutDashboard, active: true },
-        { label: "Carica turni", icon: Upload },
-        { label: "Anteprima", icon: ListChecks },
-        { label: "Cronologia", icon: History },
-        { label: "Calendario", icon: CalendarDays },
+        { label: "Dashboard", icon: LayoutDashboard, href: "/" },
+        { label: "Carica turni", icon: Upload, href: "/carica" },
+        { label: "Anteprima", icon: ListChecks, href: "/anteprima" },
+        { label: "Cronologia", icon: History, href: "/cronologia" },
+        { label: "Calendario", icon: CalendarDays, href: "/calendario" },
       ],
     },
     {
@@ -67,7 +74,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
     {
       title: "Aiuto",
       items: [
-        { label: "Impostazioni", icon: Settings, onClick: onOpenSettings },
+        { label: "Impostazioni", icon: Settings, href: "/impostazioni" },
         { label: "Supporto", icon: LifeBuoy },
       ],
     },
@@ -112,19 +119,27 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
             <ul className="space-y-1">
               {section.items.map((item) => {
                 const Icon = item.icon;
+                const isActive = item.href
+                  ? item.href === "/"
+                    ? pathname === "/"
+                    : pathname.startsWith(item.href)
+                  : false;
+                const baseClass = isActive
+                  ? "w-full flex items-center gap-3 rounded-lg bg-primary/20 px-3 py-2.5 text-sm font-semibold text-primary transition-colors text-left"
+                  : "w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 transition-colors text-left";
                 return (
                   <li key={item.label}>
-                    <button
-                      onClick={item.onClick}
-                      className={
-                        item.active
-                          ? "w-full flex items-center gap-3 rounded-lg bg-primary/20 px-3 py-2.5 text-sm font-semibold text-primary transition-colors text-left"
-                          : "w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 transition-colors text-left"
-                      }
-                    >
-                      <Icon className="h-4 w-4" />
-                      {item.label}
-                    </button>
+                    {item.href ? (
+                      <Link href={item.href} className={baseClass}>
+                        <Icon className="h-4 w-4" />
+                        {item.label}
+                      </Link>
+                    ) : (
+                      <button onClick={item.onClick} className={baseClass}>
+                        <Icon className="h-4 w-4" />
+                        {item.label}
+                      </button>
+                    )}
                   </li>
                 );
               })}

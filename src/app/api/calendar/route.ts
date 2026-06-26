@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
       auth.setCredentials({ access_token: accessToken });
       const calendar = google.calendar({ version: "v3", auth });
 
-      // Fetch existing events in range to check for duplicates
+      // Fetch existing events in range to delete them
       const dates = shifts.map((s) => s.date).sort();
       const minDate = dates[0];
       const maxDate = dates[dates.length - 1];
@@ -143,22 +143,23 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const isDuplicate = (shift: Shift, startIso: string, endIso: string) => {
-        const shiftStartMs = new Date(startIso).getTime();
-        const shiftEndMs = new Date(endIso).getTime();
-        const shiftSummary = CODE_LABELS[shift.code] || `Lavoro - ${shift.code}`;
-
-        return existingEventsList.some((evt) => {
-          const evtStartMs = evt.start?.dateTime ? new Date(evt.start.dateTime).getTime() : null;
-          const evtEndMs = evt.end?.dateTime ? new Date(evt.end.dateTime).getTime() : null;
-
-          const sameTime = evtStartMs === shiftStartMs && evtEndMs === shiftEndMs;
-          const sameSummary = evt.summary === shiftSummary;
-          const hasMarker = evt.description?.includes("[presenze-app]");
-
-          return sameTime && (sameSummary || hasMarker);
-        });
-      };
+      // Delete old events created by this app in the date range
+      let deletedCount = 0;
+      for (const evt of existingEventsList) {
+        const hasMarker = evt.description?.includes("[presenze-app]");
+        if (hasMarker && evt.id) {
+          try {
+            await calendar.events.delete({
+              calendarId,
+              eventId: evt.id,
+            });
+            deletedCount++;
+          } catch (delErr) {
+            console.error(`Failed to delete event ${evt.id}:`, delErr);
+          }
+        }
+      }
+      console.log(`Deleted ${deletedCount} existing events in range ${minDate} to ${maxDate}`);
 
       let createdCount = 0;
       let skippedCount = 0;
@@ -183,11 +184,6 @@ export async function POST(req: NextRequest) {
         } else {
           startIso = `${shift.date}T${shift.start}:00`;
           endIso = `${endDateStr}T${shift.end}:00`;
-        }
-
-        if (!isAllDay && isDuplicate(shift, startIso, endIso)) {
-          skippedCount++;
-          continue;
         }
 
         // Build summary and description
@@ -239,7 +235,7 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      return NextResponse.json({ success: true, createdCount, skippedCount });
+      return NextResponse.json({ success: true, createdCount, deletedCount, skippedCount });
     }
 
     // -------------------------------------------------------------
@@ -263,7 +259,7 @@ export async function POST(req: NextRequest) {
 // -------------------------------------------------------------
 // HELPER: Generate ICS file contents
 // -------------------------------------------------------------
-function generateICS(shifts: Shift[], timeZone: string): string {
+export function generateICS(shifts: Shift[], timeZone: string): string {
   const now = new Date();
   const dtstamp = now.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 

@@ -83,8 +83,13 @@ export async function POST(req: NextRequest) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const base64Image = buffer.toString("base64");
-    const mediaType = file.type === "image/png" ? "image/png" : 
-                      file.type === "image/webp" ? "image/webp" : "image/jpeg";
+    const mediaTypeMap: Record<string, "image/jpeg" | "image/png" | "image/webp" | "image/gif"> = {
+      "image/jpeg": "image/jpeg",
+      "image/png": "image/png",
+      "image/webp": "image/webp",
+      "image/gif": "image/gif",
+    };
+    const mediaType = mediaTypeMap[file.type] || "image/jpeg";
 
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
@@ -203,6 +208,32 @@ Anno corrente: ${new Date().getFullYear()}. Estrai solo i turni di questa riga e
     return NextResponse.json(parsedData);
   } catch (error: any) {
     console.error("Extract API Error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    
+    // Surface detailed error info for debugging
+    let errorMessage = "Errore interno del server";
+    let statusCode = 500;
+    
+    if (error?.status) {
+      statusCode = error.status;
+    }
+    
+    if (error?.error?.message) {
+      // Anthropic SDK error format
+      errorMessage = `Errore API Anthropic: ${error.error.message}`;
+    } else if (error?.message) {
+      errorMessage = error.message;
+    }
+    
+    // Common Anthropic errors with user-friendly messages
+    if (statusCode === 401 || errorMessage.includes("authentication") || errorMessage.includes("api_key")) {
+      errorMessage = "Chiave API Anthropic non valida o scaduta. Controlla la configurazione.";
+    } else if (statusCode === 429) {
+      errorMessage = "Troppi richieste all'API. Riprova fra qualche minuto.";
+    } else if (statusCode === 400 && errorMessage.includes("model")) {
+      errorMessage = `Modello AI non trovato. Dettaglio: ${errorMessage}`;
+    }
+    
+    console.error(`Extract API Error [${statusCode}]:`, errorMessage);
+    return NextResponse.json({ error: errorMessage }, { status: statusCode });
   }
 }

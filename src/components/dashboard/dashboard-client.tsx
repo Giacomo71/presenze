@@ -7,7 +7,6 @@ import { Greeting } from "@/components/dashboard/greeting";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { ShiftsReport } from "@/components/dashboard/shifts-report";
 import { ExtractionsBoard } from "@/components/dashboard/extractions-board";
-import { SettingsModal } from "@/components/dashboard/settings-modal";
 
 type Shift = {
   date: string;
@@ -96,7 +95,6 @@ export function DashboardClient() {
   const [photoCount, setPhotoCount] = useState(7);
   const [targetName, setTargetName] = useState("Amoruso Giacomo");
   const [calendarId, setCalendarId] = useState("primary");
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [feedUrl, setFeedUrl] = useState("");
 
   useEffect(() => {
@@ -233,13 +231,6 @@ export function DashboardClient() {
     localStorage.setItem("extractions", JSON.stringify(nextExtractions));
   };
 
-  const handleSaveSettings = (newTargetName: string, newCalendarId: string) => {
-    setTargetName(newTargetName);
-    setCalendarId(newCalendarId);
-    localStorage.setItem("targetName", newTargetName);
-    localStorage.setItem("calendarId", newCalendarId);
-  };
-
   // Helper to calculate shift duration in hours
   const calculateDuration = (start: string, end: string) => {
     if (!start || !end) return 0;
@@ -267,7 +258,7 @@ export function DashboardClient() {
 
   return (
     <div className="flex min-h-screen bg-transparent">
-      <Sidebar onOpenSettings={() => setIsSettingsOpen(true)} />
+      <Sidebar />
 
       <main className="flex-1 min-w-0">
         <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
@@ -278,7 +269,6 @@ export function DashboardClient() {
             calendarId={calendarId}
             onExtractionComplete={handleExtractionComplete}
             onShiftsSaved={handleShiftsSaved}
-            onOpenSettings={() => setIsSettingsOpen(true)}
           />
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -324,15 +314,6 @@ export function DashboardClient() {
           />
         </div>
       </main>
-
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        targetName={targetName}
-        calendarId={calendarId}
-        onSave={handleSaveSettings}
-        feedUrl={feedUrl}
-      />
     </div>
   );
 }
