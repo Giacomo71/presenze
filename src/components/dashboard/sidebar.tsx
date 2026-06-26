@@ -55,13 +55,19 @@ export function Sidebar({ onOpenSettings }: SidebarProps = {}) {
 
   const sections: NavSection[] = [
     {
-      title: "Menu principale",
+      title: "Presenze (Lavoro)",
       items: [
         { label: "Dashboard", icon: LayoutDashboard, href: "/" },
         { label: "Carica turni", icon: Upload, href: "/carica" },
         { label: "Anteprima", icon: ListChecks, href: "/anteprima" },
         { label: "Cronologia", icon: History, href: "/cronologia" },
         { label: "Calendario", icon: CalendarDays, href: "/calendario" },
+      ],
+    },
+    {
+      title: "Utenze (Casa)",
+      items: [
+        { label: "Analisi Bollette", icon: BookOpen, href: "/bill-import/selection" },
       ],
     },
     {
