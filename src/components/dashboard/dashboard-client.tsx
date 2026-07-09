@@ -130,7 +130,7 @@ export function DashboardClient() {
     }
     setSavedShifts(initialShifts);
 
-    // Sync shifts with the server
+    // Sync shifts with the server — il server è la fonte di verità
     const syncWithServer = async () => {
       try {
         const res = await fetch("/api/calendar");
@@ -139,16 +139,13 @@ export function DashboardClient() {
           if (data.feedUrl) setFeedUrl(data.feedUrl);
 
           if (data.shifts && data.shifts.length > 0) {
-            // Server has shifts, prioritize server copy
+            // Server ha turni: usa sempre quelli (fonte di verità)
             setSavedShifts(data.shifts);
             localStorage.setItem("savedShifts", JSON.stringify(data.shifts));
-          } else if (initialShifts.length > 0) {
-            // Server is empty but client has shifts, populate server
-            await fetch("/api/calendar", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ shifts: initialShifts, destination: "save" }),
-            });
+          } else {
+            // Server vuoto: non sovrascrivere con seed data, lista vuota
+            setSavedShifts([]);
+            localStorage.setItem("savedShifts", JSON.stringify([]));
           }
         }
       } catch (err) {
@@ -183,19 +180,16 @@ export function DashboardClient() {
     localStorage.setItem("extractions", JSON.stringify(nextExtractions));
   };
 
-  const handleShiftsSaved = async (newShifts: Shift[], destination: "google" | "ics") => {
-    const updatedShifts = [...savedShifts];
-    let added = 0;
-    for (const ns of newShifts) {
-      if (ns.code === "R") continue; // Don't persist rest days in stats
-      const exists = updatedShifts.some(
-        (s) => s.date === ns.date && s.start === ns.start && s.code === ns.code
-      );
-      if (!exists) {
-        updatedShifts.push(ns);
-        added++;
-      }
-    }
+  const handleShiftsSaved = async (newShifts: Shift[], destination: "google" | "ics" | "site") => {
+    // New robust merge logic:
+    // 1. Get all dates of the incoming shifts
+    const newDates = new Set(newShifts.map((ns) => ns.date));
+
+    // 2. Filter out any existing shifts that belong to these dates
+    const filteredShifts = savedShifts.filter((s) => !newDates.has(s.date));
+
+    // 3. Append only non-rest ("R") shifts from the incoming list
+    const updatedShifts = [...filteredShifts, ...newShifts.filter((ns) => ns.code !== "R")];
 
     // Always update client state and localStorage
     setSavedShifts(updatedShifts);
@@ -215,10 +209,14 @@ export function DashboardClient() {
     // Transition review card to done
     const nextExtractions = extractions.map((card) => {
       if (card.columnId === "review") {
+        const descText =
+          destination === "site"
+            ? `Salvati ${newShifts.length} turni nel calendario del sito.`
+            : `Sincronizzati ${newShifts.length} eventi via ${destination.toUpperCase()}.`;
         return {
           ...card,
           columnId: "done",
-          description: `Sincronizzati ${newShifts.length} eventi via ${destination.toUpperCase()}.`,
+          description: descText,
           tags: [
             { label: "Completato", color: "emerald" as const },
             { label: `${newShifts.length} eventi`, color: "blue" as const },
@@ -262,7 +260,7 @@ export function DashboardClient() {
       <Sidebar />
 
       <main className="flex-1 min-w-0">
-        <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 pb-28 sm:px-6 lg:px-8 lg:pb-6">
           <PromoBanner />
           
           <Greeting

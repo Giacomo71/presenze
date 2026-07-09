@@ -1,6 +1,6 @@
 "use client";
 
-import { Upload, Loader2, X, CheckCircle2, Download, Plus, Settings2 } from "lucide-react";
+import { Upload, Loader2, X, CheckCircle2, Download, Plus, Settings2, Save, CalendarDays } from "lucide-react";
 import { useState } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
@@ -28,7 +28,7 @@ type GreetingProps = {
   targetName: string;
   calendarId: string;
   onExtractionComplete: (shifts: Shift[], fileName: string, warnings: string[]) => void;
-  onShiftsSaved: (shifts: Shift[], destination: "google" | "ics") => void;
+  onShiftsSaved: (shifts: Shift[], destination: "google" | "ics" | "site") => void;
 };
 
 export function Greeting({
@@ -58,7 +58,6 @@ export function Greeting({
 
       const formData = new FormData();
       formData.append("image", file);
-      formData.append("targetName", targetName);
 
       const res = await fetch("/api/extract", {
         method: "POST",
@@ -168,6 +167,27 @@ export function Greeting({
     }
   };
 
+  const handleSaveToSiteCalendar = async () => {
+    if (!extractedShifts || extractedShifts.length === 0) return;
+
+    try {
+      setIsSaving(true);
+      setSaveResult(null);
+
+      // Save shifts history locally and on the server via parent callback
+      await onShiftsSaved(extractedShifts, "site");
+
+      setSaveResult({
+        message: `Salvataggio completato! Aggiunti ${extractedShifts.length} turni al calendario del sito (feed ICS).`,
+        success: true,
+      });
+    } catch (err: any) {
+      setSaveResult({ message: err.message || "Errore durante il salvataggio sul sito.", success: false });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const updateShift = (idx: number, field: keyof Shift, value: string) => {
     if (!extractedShifts) return;
     const updated = [...extractedShifts];
@@ -227,7 +247,14 @@ export function Greeting({
           </div>
           <p className="mt-1.5 text-sm font-medium text-slate-400">{todayInItalian()}</p>
         </div>
-        <div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            href="/calendario"
+            className="inline-flex items-center justify-center rounded-xl border border-slate-750 bg-slate-800/30 hover:bg-slate-800/60 px-5 py-4 text-sm font-semibold text-slate-300 hover:text-white transition-all duration-300 shadow-md hover:scale-105"
+          >
+            <CalendarDays className="mr-2 h-5 w-5 text-primary" />
+            Vedi Calendario
+          </Link>
           <label
             className={`inline-flex cursor-pointer items-center justify-center rounded-xl text-white shadow-lg shadow-primary/25 transition-all duration-300 font-semibold px-6 py-4 ${
               isExtracting
@@ -446,6 +473,24 @@ export function Greeting({
               >
                 <Download className="mr-2 h-4 w-4 inline" />
                 Scarica file .ics
+              </button>
+
+              <button
+                onClick={handleSaveToSiteCalendar}
+                className="px-5 py-2.5 rounded-lg text-sm font-medium bg-violet-600 hover:bg-violet-500 text-white shadow-lg shadow-violet-500/20 transition-all hover:scale-105 disabled:opacity-50 disabled:pointer-events-none"
+                disabled={extractedShifts.length === 0 || isSaving || saveResult?.success === true}
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin inline" />
+                    Salvataggio in corso...
+                  </>
+                ) : (
+                  <>
+                    <Save className="mr-2 h-4 w-4 inline" />
+                    Salva nel calendario del sito
+                  </>
+                )}
               </button>
 
               <button

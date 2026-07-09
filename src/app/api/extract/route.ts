@@ -237,11 +237,26 @@ Anno corrente: ${new Date().getFullYear()}. Estrai solo i turni di questa riga e
       errorMessage = error.message;
     }
     
+    // Detect token/credit exhaustion
+    const isQuotaExceeded = 
+      errorMessage.toLowerCase().includes("credit") || 
+      errorMessage.toLowerCase().includes("quota") || 
+      errorMessage.toLowerCase().includes("billing") ||
+      errorMessage.toLowerCase().includes("balance");
+
+    if (isQuotaExceeded) {
+      console.error(`Extract API Quota Exceeded Error [${statusCode}]:`, errorMessage);
+      return NextResponse.json({
+        error: "Quota AI esaurita. Il saldo crediti Anthropic è insufficiente.",
+        code: "TOKEN_EXHAUSTED"
+      }, { status: 429 });
+    }
+
     // Common Anthropic errors with user-friendly messages
     if (statusCode === 401 || errorMessage.includes("authentication") || errorMessage.includes("api_key")) {
       errorMessage = "Chiave API Anthropic non valida o scaduta. Controlla la configurazione.";
     } else if (statusCode === 429) {
-      errorMessage = "Troppi richieste all'API. Riprova fra qualche minuto.";
+      errorMessage = "Troppe richieste all'API. Riprova fra qualche minuto.";
     } else if (statusCode === 400 && errorMessage.includes("model")) {
       errorMessage = `Modello AI non trovato. Dettaglio: ${errorMessage}`;
     }

@@ -148,7 +148,7 @@ export default function ImpostazioniPage() {
       <Sidebar />
 
       <main className="flex-1 min-w-0">
-        <div className="mx-auto max-w-4xl space-y-10 px-4 py-8 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-4xl space-y-10 px-4 py-8 pb-28 sm:px-6 lg:px-8 lg:pb-8">
           
           {/* Settings Section */}
           <section className="space-y-6">

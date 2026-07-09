@@ -154,7 +154,7 @@ export default function CronologiaPage() {
       <Sidebar />
 
       <main className="flex-1 min-w-0">
-        <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 pb-28 sm:px-6 lg:px-8 lg:pb-6">
           
           {/* Header */}
           <div className="space-y-1">

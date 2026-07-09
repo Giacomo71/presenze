@@ -2,20 +2,22 @@
 
 import { useState, useRef } from "react";
 import { Sidebar } from "@/components/dashboard/sidebar";
-import { Upload, ImageIcon, Loader2, CheckCircle2, AlertTriangle, X, FileImage } from "lucide-react";
+import { Upload, ImageIcon, Loader2, CheckCircle2, AlertTriangle, X, FileImage, CalendarCheck, Coins } from "lucide-react";
 import { useSession } from "next-auth/react";
 
 type Shift = { date: string; start: string; end: string; code: string; note: string };
 
 export function CaricaClient() {
   const { data: session } = useSession();
-  const [targetName, setTargetName] = useState("Amoruso Giacomo");
   const [isDragging, setIsDragging] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveResult, setSaveResult] = useState<{ message: string; success: boolean } | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [extractedShifts, setExtractedShifts] = useState<Shift[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [tokenExhausted, setTokenExhausted] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = async (file: File) => {
@@ -24,24 +26,71 @@ export function CaricaClient() {
       return;
     }
     setError(null);
+    setTokenExhausted(false);
     setExtractedShifts(null);
+    setSaveResult(null);
     setFileName(file.name);
     setPreview(URL.createObjectURL(file));
 
     const formData = new FormData();
     formData.append("image", file);
-    formData.append("targetName", targetName);
 
     setIsExtracting(true);
     try {
       const res = await fetch("/api/extract", { method: "POST", body: formData });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Errore estrazione");
+      if (!res.ok) {
+        const errObj = new Error(data.error || "Errore estrazione");
+        (errObj as any).code = data.code;
+        throw errObj;
+      }
       setExtractedShifts(data.shifts || []);
     } catch (err: any) {
       setError(err.message);
+      if (err.code === "TOKEN_EXHAUSTED") {
+        setTokenExhausted(true);
+      }
     } finally {
       setIsExtracting(false);
+    }
+  };
+
+  const handleSaveToCalendar = async () => {
+    if (!extractedShifts || extractedShifts.length === 0) return;
+    setIsSaving(true);
+    setSaveResult(null);
+    try {
+      // 1. Leggi turni già salvati nel server
+      let existingShifts: Shift[] = [];
+      const getRes = await fetch("/api/calendar");
+      if (getRes.ok) {
+        const getData = await getRes.json();
+        existingShifts = getData.shifts || [];
+      }
+
+      // 2. Merge robusto per sovrascrittura di data:
+      const newDates = new Set(extractedShifts.map((ns) => ns.date));
+      const filteredShifts = existingShifts.filter((s) => !newDates.has(s.date));
+      const nonRestShifts = extractedShifts.filter((ns) => ns.code !== "R");
+      const merged = [...filteredShifts, ...nonRestShifts];
+      const addedCount = nonRestShifts.length;
+
+      // 3. Salva il merge nel server
+      const res = await fetch("/api/calendar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shifts: merged, destination: "save" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Errore nel salvataggio");
+      setSaveResult({
+        message: `✓ ${addedCount} turni aggiunti al Calendario (${merged.length} totali). Ora sono visibili nella pagina Calendario.`,
+        success: true,
+      });
+    } catch (err: any) {
+      setSaveResult({ message: err.message, success: false });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -63,7 +112,7 @@ export function CaricaClient() {
     <div className="flex min-h-screen bg-transparent">
       <Sidebar />
       <main className="flex-1 min-w-0 flex flex-col">
-        <div className="mx-auto max-w-3xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-3xl space-y-6 px-4 py-8 pb-28 sm:px-6 lg:px-8 lg:pb-8">
           {/* Header */}
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/20 ring-1 ring-primary/30">
@@ -144,8 +193,32 @@ export function CaricaClient() {
                     {fileName && <span className="text-slate-400 font-normal"> da {fileName}</span>}
                   </p>
                 </div>
-                <span className="text-xs text-slate-500">Vai su Dashboard per sincronizzare</span>
+                <button
+                  onClick={handleSaveToCalendar}
+                  disabled={isSaving || saveResult?.success === true || extractedShifts.length === 0}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-all hover:scale-105 disabled:opacity-50 disabled:pointer-events-none shadow-lg shadow-emerald-500/20"
+                >
+                  {isSaving ? (
+                    <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Salvataggio...</>
+                  ) : saveResult?.success ? (
+                    <><CheckCircle2 className="h-3.5 w-3.5" /> Salvati!</>
+                  ) : (
+                    <><CalendarCheck className="h-3.5 w-3.5" /> Salva nel Calendario</>
+                  )}
+                </button>
               </div>
+
+              {/* Feedback salvataggio */}
+              {saveResult && (
+                <div className={`px-5 py-3 text-xs font-medium border-b border-slate-700/40 ${
+                  saveResult.success
+                    ? "bg-emerald-500/10 text-emerald-300"
+                    : "bg-rose-500/10 text-rose-300"
+                }`}>
+                  {saveResult.message}
+                </div>
+              )}
+
               <div className="divide-y divide-slate-800/50">
                 {extractedShifts.map((s, i) => (
                   <div key={i} className="flex items-center gap-4 px-5 py-3 hover:bg-slate-800/20 transition-colors">
@@ -168,13 +241,59 @@ export function CaricaClient() {
             <div className="rounded-xl border border-slate-700/40 bg-slate-900/30 px-5 py-4 flex items-start gap-3">
               <ImageIcon className="h-4 w-4 shrink-0 text-slate-500 mt-0.5" />
               <p className="text-xs text-slate-500 leading-relaxed">
-                Per risultati migliori usa foto nitide e ben illuminate. Il nome cercato è{" "}
-                <span className="text-slate-300 font-medium">{targetName}</span> — puoi cambiarlo nelle Impostazioni.
+                Per risultati migliori usa foto nitide e ben illuminate. L&apos;estrazione è ottimizzata per{" "}
+                <span className="text-slate-300 font-medium">Amoruso Giacomo</span>.
               </p>
             </div>
           )}
         </div>
       </main>
+
+      {/* Modal Quota AI Esaurita */}
+      {tokenExhausted && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm transition-all duration-300 animate-in fade-in">
+          <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/90 p-6 text-center shadow-2xl transition-all duration-300 animate-in zoom-in-95">
+            {/* Background glows */}
+            <div className="absolute -top-12 -left-12 h-24 w-24 rounded-full bg-rose-500/10 blur-xl"></div>
+            <div className="absolute -top-12 -right-12 h-24 w-24 rounded-full bg-amber-500/10 blur-xl"></div>
+
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-amber-500/10 ring-8 ring-amber-500/5">
+              <Coins className="h-6 w-6 text-amber-400" />
+            </div>
+
+            <h3 className="mt-4 text-lg font-bold text-white">Quota AI Esaurita</h3>
+            <p className="mt-2 text-sm text-slate-400 leading-relaxed">
+              I token di interrogazione per l&apos;estrazione automatica tramite Intelligenza Artificiale sono esauriti o il credito dell&apos;API Anthropic è terminato.
+            </p>
+
+            <div className="mt-4 rounded-lg bg-slate-950/50 p-3 border border-slate-800 text-left">
+              <p className="text-xs font-mono text-slate-500">
+                Codice errore: TOKEN_EXHAUSTED (429 Quota)
+              </p>
+              <p className="mt-1 text-xs text-slate-400">
+                Per risolvere, è necessario ricaricare il saldo prepagato sulla console sviluppatori di Anthropic o verificare i limiti di utilizzo.
+              </p>
+            </div>
+
+            <div className="mt-6 flex flex-col gap-2">
+              <a 
+                href="https://console.anthropic.com/" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="inline-flex w-full items-center justify-center rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-primary/30 hover:bg-primary/90 transition-all active:scale-95"
+              >
+                Apri Console Anthropic
+              </a>
+              <button
+                onClick={() => setTokenExhausted(false)}
+                className="inline-flex w-full items-center justify-center rounded-xl border border-slate-700 bg-slate-800/50 px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-all active:scale-95"
+              >
+                Chiudi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
