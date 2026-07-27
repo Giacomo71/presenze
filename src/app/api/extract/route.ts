@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
     const mediaType = mediaTypeMap[file.type] || "image/jpeg";
 
     const response = await anthropic.messages.create({
-      model: "claude-3-haiku-20240307",
+      model: "claude-3-5-sonnet-20241022",
       max_tokens: 4000,
       system: `Sei un assistente AI specializzato nell'estrazione OCR e interpretazione di tabelle di turni di lavoro da immagini di planning aziendali.
 Il tuo obiettivo è analizzare la tabella e individuare SOLO i turni della persona indicata.
