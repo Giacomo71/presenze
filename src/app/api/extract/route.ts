@@ -15,7 +15,7 @@ const MAX_REQUESTS = 20;
 function isRateLimited(userId: string): boolean {
   const now = Date.now();
   let timestamps = rateLimitMap.get(userId) || [];
-  timestamps = timestamps.filter(t => now - t < RATE_LIMIT_WINDOW);
+  timestamps = timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW);
   if (timestamps.length >= MAX_REQUESTS) {
     rateLimitMap.set(userId, timestamps);
     return true;
@@ -59,12 +59,18 @@ export async function POST(req: NextRequest) {
 
     const email = session.user?.email || "anonymous";
     if (isRateLimited(email)) {
-      return NextResponse.json({ error: "Troppe richieste. Massimo 20 estrazioni all'ora." }, { status: 429 });
+      return NextResponse.json(
+        { error: "Troppe richieste. Massimo 20 estrazioni all'ora." },
+        { status: 429 }
+      );
     }
 
     const formData = await req.formData();
     const file = formData.get("image") as File;
-    const targetName = formData.get("targetName") as string || process.env.TARGET_NAME || "Amoruso Giacomo";
+    const targetName =
+      (formData.get("targetName") as string) ||
+      process.env.TARGET_NAME ||
+      "M.C. Amoruso Giacomo";
 
     if (!file) {
       return NextResponse.json({ error: "Nessuna immagine fornita" }, { status: 400 });
@@ -72,13 +78,19 @@ export async function POST(req: NextRequest) {
 
     // Validate size (max 10MB)
     if (file.size > 10 * 1024 * 1024) {
-      return NextResponse.json({ error: "L'immagine supera il limite di 10 MB" }, { status: 400 });
+      return NextResponse.json(
+        { error: "L'immagine supera il limite di 10 MB" },
+        { status: 400 }
+      );
     }
 
     // Validate MIME type
     const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
     if (!allowedTypes.includes(file.type)) {
-      return NextResponse.json({ error: "Formato file non supportato. Carica un'immagine (JPEG, PNG, WEBP, GIF)." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Formato file non supportato. Carica un'immagine (JPEG, PNG, WEBP, GIF)." },
+        { status: 400 }
+      );
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -92,7 +104,7 @@ export async function POST(req: NextRequest) {
     const mediaType = mediaTypeMap[file.type] || "image/jpeg";
 
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+      model: "claude-3-5-sonnet-20241022",
       max_tokens: 4000,
       system: `Sei un assistente AI specializzato nell'estrazione OCR e interpretazione di tabelle di turni di lavoro da immagini di planning aziendali.
 Il tuo obiettivo è analizzare la tabella e individuare SOLO i turni della persona indicata.
@@ -105,7 +117,8 @@ Segui questa procedura passo-passo per garantire la massima accuratezza:
    - Fai molta attenzione ad associare correttamente ciascuna colonna al rispettivo giorno del mese. Evita sfasamenti o salti di colonna.
 3. TROVA LA RIGA DELL'UTENTE:
    - Cerca nella prima colonna (o dove sono elencati i nomi dei dipendenti) il nome fornito.
-   - Sii estremamente flessibile e tollerante su variazioni, abbreviazioni o refusi di OCR (es. "Amoruso G.", "G. Amoruso", "AMORUSO GIAC.", "M.A. AMORUSO" sono tutti la stessa persona).
+   - Sii estremamente flessibile e tollerante su variazioni, abbreviazioni, prefissi di qualifica/livello o refusi di OCR.
+   - Esempi di matching validi per la stessa persona: "Amoruso Giacomo", "AMORUSO G.", "G. AMORUSO", "AMORUSO GIAC.", "M.A. AMORUSO", "M.C. AMORUSO", "M.C. Amoruso Giacomo".
 4. ESTRAGGI I TURNI:
    - Scorri le celle della riga dell'utente colonna per colonna, mappando ciascuna cella al rispettivo giorno (date in formato YYYY-MM-DD).
    - Interpreta il testo presente in ogni cella:
@@ -130,14 +143,14 @@ Format:
           content: [
             {
               type: "text",
-              text: `Cerca la riga relativa a: "${targetName}" (che nel planning può essere indicato come "AMORUSO G.", "G. AMORUSO", "AMORUSO GIAC." o anche "M.A. AMORUSO", dove "M.A." indica la qualifica/livello e non un'altra persona). Sono la stessa identica persona!
-Anno corrente: ${new Date().getFullYear()}. Estrai solo i turni di questa riga e restituisci ESCLUSIVAMENTE il JSON con i turni. Non aggiungere testo discorsivo.`
+              text: `Cerca la riga relativa a: "${targetName}" (che nel planning può presentarsi con variazioni o prefissi di qualifica come "Amoruso Giacomo", "AMORUSO G.", "G. AMORUSO", "AMORUSO GIAC.", "M.A. AMORUSO", "M.C. AMORUSO" o "M.C. Amoruso Giacomo"). Si riferiscono TUTTE allo stesso identico utente.
+Anno corrente: ${new Date().getFullYear()}. Estrai solo i turni di questa riga e restituisci ESCLUSIVAMENTE il JSON con i turni. Non aggiungere testo discorsivo.`,
             },
             {
               type: "image",
               source: {
                 type: "base64",
-                media_type: mediaType as "image/jpeg" | "image/png" | "image/webp",
+                media_type: mediaType,
                 data: base64Image,
               },
             },
@@ -157,10 +170,10 @@ Anno corrente: ${new Date().getFullYear()}. Estrai solo i turni di questa riga e
 
     // Try multiple strategies to extract JSON
     let jsonStr = fullText.trim();
-    
+
     // Strategy 1: Remove markdown code fences
     jsonStr = jsonStr.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
-    
+
     // Strategy 2: Extract JSON object from surrounding text
     const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
@@ -173,7 +186,7 @@ Anno corrente: ${new Date().getFullYear()}. Estrai solo i turni di questa riga e
     try {
       parsedData = JSON.parse(jsonStr);
       console.log("Parsed data:", parsedData);
-      
+
       // Post-process: add reminders based on date/shift rules
       if (Array.isArray(parsedData.shifts)) {
         for (const shift of parsedData.shifts) {
@@ -212,47 +225,49 @@ Anno corrente: ${new Date().getFullYear()}. Estrai solo i turni di questa riga e
       }
     } catch (e) {
       console.error("Failed to parse JSON from Claude:", jsonStr);
-      return NextResponse.json({ 
-        error: "Impossibile leggere la risposta AI. Riprova con una foto più nitida.",
-        rawResponse: fullText.substring(0, 500)
-      }, { status: 500 });
+      return NextResponse.json(
+        {
+          error: "Impossibile leggere la risposta AI. Riprova con una foto più nitida.",
+          rawResponse: fullText.substring(0, 500),
+        },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json(parsedData);
   } catch (error: any) {
     console.error("Extract API Error:", error);
-    
-    // Surface detailed error info for debugging
+
     let errorMessage = "Errore interno del server";
     let statusCode = 500;
-    
+
     if (error?.status) {
       statusCode = error.status;
     }
-    
+
     if (error?.error?.message) {
-      // Anthropic SDK error format
       errorMessage = `Errore API Anthropic: ${error.error.message}`;
     } else if (error?.message) {
       errorMessage = error.message;
     }
-    
-    // Detect token/credit exhaustion
-    const isQuotaExceeded = 
-      errorMessage.toLowerCase().includes("credit") || 
-      errorMessage.toLowerCase().includes("quota") || 
+
+    const isQuotaExceeded =
+      errorMessage.toLowerCase().includes("credit") ||
+      errorMessage.toLowerCase().includes("quota") ||
       errorMessage.toLowerCase().includes("billing") ||
       errorMessage.toLowerCase().includes("balance");
 
     if (isQuotaExceeded) {
       console.error(`Extract API Quota Exceeded Error [${statusCode}]:`, errorMessage);
-      return NextResponse.json({
-        error: "Quota AI esaurita. Il saldo crediti Anthropic è insufficiente.",
-        code: "TOKEN_EXHAUSTED"
-      }, { status: 429 });
+      return NextResponse.json(
+        {
+          error: "Quota AI esaurita. Il saldo crediti Anthropic è insufficiente.",
+          code: "TOKEN_EXHAUSTED",
+        },
+        { status: 429 }
+      );
     }
 
-    // Common Anthropic errors with user-friendly messages
     if (statusCode === 401 || errorMessage.includes("authentication") || errorMessage.includes("api_key")) {
       errorMessage = "Chiave API Anthropic non valida o scaduta. Controlla la configurazione.";
     } else if (statusCode === 429) {
@@ -260,7 +275,7 @@ Anno corrente: ${new Date().getFullYear()}. Estrai solo i turni di questa riga e
     } else if (statusCode === 400 && errorMessage.includes("model")) {
       errorMessage = `Modello AI non trovato. Dettaglio: ${errorMessage}`;
     }
-    
+
     console.error(`Extract API Error [${statusCode}]:`, errorMessage);
     return NextResponse.json({ error: errorMessage }, { status: statusCode });
   }

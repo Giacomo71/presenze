@@ -58,6 +58,7 @@ export function Greeting({
 
       const formData = new FormData();
       formData.append("image", file);
+      formData.append("targetName", targetName || "M.C. Amoruso Giacomo");
 
       const res = await fetch("/api/extract", {
         method: "POST",
@@ -95,49 +96,67 @@ export function Greeting({
       setIsSaving(true);
       setSaveResult(null);
 
-      // 1. Sincronizzazione immediata con Google Calendar
-      const googleRes = await fetch("/api/calendar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          shifts: extractedShifts,
-          destination: "google",
-          calendarId: calendarId,
-        }),
-      });
+      let googleSuccess = false;
+      let googleMessage = "";
 
-      if (!googleRes.ok) {
-        const errData = await googleRes.json().catch(() => ({ error: "Errore di sincronizzazione" }));
-        throw new Error(errData.error || "Sincronizzazione non riuscita.");
+      // 1. Sincronizzazione con Google Calendar (non bloccante)
+      try {
+        const googleRes = await fetch("/api/calendar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            shifts: extractedShifts,
+            destination: "google",
+            calendarId: calendarId,
+          }),
+        });
+
+        if (!googleRes.ok) {
+          const errData = await googleRes.json().catch(() => ({ error: "Errore di sincronizzazione" }));
+          googleMessage = errData.error || "Sincronizzazione Google non riuscita.";
+        } else {
+          const googleData = await googleRes.json();
+          googleSuccess = true;
+          googleMessage = `sincronizzati ${googleData.createdCount} eventi su Google Calendar (saltati ${googleData.skippedCount})`;
+        }
+      } catch (gErr: any) {
+        googleMessage = "Errore di connessione a Google Calendar.";
       }
 
-      const googleData = await googleRes.json();
-
       // 2. Scaricamento file .ics
-      const icsRes = await fetch("/api/calendar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shifts: extractedShifts, destination: "ics" }),
-      });
+      try {
+        const icsRes = await fetch("/api/calendar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ shifts: extractedShifts, destination: "ics" }),
+        });
 
-      if (icsRes.ok) {
-        const blob = await icsRes.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `turni-${extractedShifts[0]?.date || "export"}.ics`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        if (icsRes.ok) {
+          const blob = await icsRes.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `turni-${extractedShifts[0]?.date || "export"}.ics`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }
+      } catch (icsErr) {
+        console.error("Errore download ICS", icsErr);
       }
 
       // 3. Salvataggio nel calendario del sito (DB + Stato locale)
       await onShiftsSaved(extractedShifts, "google");
 
+      const baseMessage = `Salvati ${extractedShifts.length} turni nel sito e scaricato file .ics.`;
+      const finalMessage = googleSuccess 
+        ? `Tutto completato! ${baseMessage} Inoltre, ${googleMessage}.`
+        : `${baseMessage} ATTENZIONE: ${googleMessage}`;
+
       setSaveResult({
-        message: `Tutto completato! Salvati ${extractedShifts.length} turni nel sito, sincronizzati ${googleData.createdCount} eventi su Google Calendar (con ${googleData.skippedCount} duplicati saltati) e scaricato il file .ics.`,
-        success: true,
+        message: finalMessage,
+        success: true, // overall success because site save worked
       });
     } catch (err: any) {
       setSaveResult({ message: err.message || "Errore durante il salvataggio combinato.", success: false });

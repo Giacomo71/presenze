@@ -34,6 +34,7 @@ export function CaricaClient() {
 
     const formData = new FormData();
     formData.append("image", file);
+    formData.append("targetName", "M.C. Amoruso Giacomo");
 
     setIsExtracting(true);
     try {

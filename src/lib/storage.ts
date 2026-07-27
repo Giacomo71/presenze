@@ -13,7 +13,9 @@ export type Shift = {
 const KV_URL = process.env.KV_REST_API_URL;
 const KV_TOKEN = process.env.KV_REST_API_TOKEN;
 
-const LOCAL_DB_DIR = path.join(process.cwd(), "data");
+// On Vercel or serverless, only /tmp is writable
+const isServerless = process.env.VERCEL || process.env.NODE_ENV === "production";
+const LOCAL_DB_DIR = isServerless ? path.join("/tmp", "data") : path.join(process.cwd(), "data");
 const LOCAL_DB_PATH = path.join(LOCAL_DB_DIR, "shifts.json");
 
 export async function getShifts(): Promise<Shift[]> {
