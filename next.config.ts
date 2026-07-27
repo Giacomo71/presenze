@@ -1,10 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  experimental: {
-    // @ts-ignore
-    allowedDevOrigins: ["192.168.1.160"],
-  },
+  // @ts-ignore
+  allowedDevOrigins: ["192.168.1.160"],
   images: {
     remotePatterns: [
       {

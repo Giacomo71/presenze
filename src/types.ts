@@ -1,12 +1,16 @@
+export type UtilityType = 'electricity' | 'gas';
+
 export interface Offer {
   provider: string;
-  pricePerKwh: number; // €/kWh
+  utility: UtilityType;
+  pricePerUnit: number; // €/kWh for electricity, €/smc for gas
   fixedMonthlyFee: number; // € per month
   contractLengthMonths: number;
 }
 
 export interface ConsumptionRecord {
-  month: number; // 1‑12
+  utility: UtilityType;
+  month: number; // 1-12
   year: number;
-  consumptionKwh: number;
+  consumption: number; // kWh for electricity, smc for gas
 }

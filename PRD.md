@@ -67,7 +67,7 @@ Conseguenze:
 - [x] Stato finale: "X eventi creati, Y skippati"
 
 ### Nice-to-have (v1.1+)
-- Riconoscimento turni ricorrenti ("Mattina" = 06–14, "Pomeriggio" = 14–22, "Notte" = 22–06) configurabili
+- Riconoscimento turni ricorrenti ("Mattina" = 08–20, "Notte" = 22–24,"Notte" = 00–08) configurabili
 - Cronologia delle elaborazioni passate
 - Possibilità di ricevere foto via Telegram bot / email-to-app
 - PWA installabile su mobile, con camera diretta

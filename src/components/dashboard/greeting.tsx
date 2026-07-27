@@ -88,56 +88,15 @@ export function Greeting({
     }
   };
 
-  const handleDownloadICS = async () => {
-    if (!extractedShifts || extractedShifts.length === 0) return;
-
-    try {
-      setIsSaving(true);
-      setSaveResult(null);
-      const res = await fetch("/api/calendar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shifts: extractedShifts, destination: "ics" }),
-      });
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({ error: "Errore scaricamento file .ics" }));
-        throw new Error(errData.error || "Errore sconosciuto");
-      }
-
-      // Download the .ics file
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `turni-${extractedShifts[0]?.date || "export"}.ics`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-
-      setSaveResult({
-        message: `File .ics scaricato con successo (${extractedShifts.length} eventi)! Aprilo per importarli nel calendario.`,
-        success: true,
-      });
-
-      // Save shifts history locally in the parent
-      onShiftsSaved(extractedShifts, "ics");
-    } catch (err: any) {
-      setSaveResult({ message: err.message, success: false });
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleSyncGoogleCalendar = async () => {
+  const handleSaveAndSyncAll = async () => {
     if (!extractedShifts || extractedShifts.length === 0) return;
 
     try {
       setIsSaving(true);
       setSaveResult(null);
 
-      const res = await fetch("/api/calendar", {
+      // 1. Sincronizzazione immediata con Google Calendar
+      const googleRes = await fetch("/api/calendar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -147,42 +106,41 @@ export function Greeting({
         }),
       });
 
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({ error: "Errore di sincronizzazione" }));
+      if (!googleRes.ok) {
+        const errData = await googleRes.json().catch(() => ({ error: "Errore di sincronizzazione" }));
         throw new Error(errData.error || "Sincronizzazione non riuscita.");
       }
 
-      const data = await res.json();
-      setSaveResult({
-        message: `Sincronizzazione completata! Creati ${data.createdCount} eventi, skippati ${data.skippedCount} duplicati esistenti.`,
-        success: true,
+      const googleData = await googleRes.json();
+
+      // 2. Scaricamento file .ics
+      const icsRes = await fetch("/api/calendar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shifts: extractedShifts, destination: "ics" }),
       });
 
-      // Save shifts history locally in the parent
-      onShiftsSaved(extractedShifts, "google");
-    } catch (err: any) {
-      setSaveResult({ message: err.message, success: false });
-    } finally {
-      setIsSaving(false);
-    }
-  };
+      if (icsRes.ok) {
+        const blob = await icsRes.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `turni-${extractedShifts[0]?.date || "export"}.ics`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
 
-  const handleSaveToSiteCalendar = async () => {
-    if (!extractedShifts || extractedShifts.length === 0) return;
-
-    try {
-      setIsSaving(true);
-      setSaveResult(null);
-
-      // Save shifts history locally and on the server via parent callback
-      await onShiftsSaved(extractedShifts, "site");
+      // 3. Salvataggio nel calendario del sito (DB + Stato locale)
+      await onShiftsSaved(extractedShifts, "google");
 
       setSaveResult({
-        message: `Salvataggio completato! Aggiunti ${extractedShifts.length} turni al calendario del sito (feed ICS).`,
+        message: `Tutto completato! Salvati ${extractedShifts.length} turni nel sito, sincronizzati ${googleData.createdCount} eventi su Google Calendar (con ${googleData.skippedCount} duplicati saltati) e scaricato il file .ics.`,
         success: true,
       });
     } catch (err: any) {
-      setSaveResult({ message: err.message || "Errore durante il salvataggio sul sito.", success: false });
+      setSaveResult({ message: err.message || "Errore durante il salvataggio combinato.", success: false });
     } finally {
       setIsSaving(false);
     }
@@ -467,46 +425,19 @@ export function Greeting({
               </button>
 
               <button
-                onClick={handleDownloadICS}
-                className="px-5 py-2.5 rounded-lg text-sm font-medium border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 transition-all disabled:opacity-50"
-                disabled={extractedShifts.length === 0 || isSaving || saveResult?.success === true}
-              >
-                <Download className="mr-2 h-4 w-4 inline" />
-                Scarica file .ics
-              </button>
-
-              <button
-                onClick={handleSaveToSiteCalendar}
-                className="px-5 py-2.5 rounded-lg text-sm font-medium bg-violet-600 hover:bg-violet-500 text-white shadow-lg shadow-violet-500/20 transition-all hover:scale-105 disabled:opacity-50 disabled:pointer-events-none"
+                onClick={handleSaveAndSyncAll}
+                className="px-5 py-2.5 rounded-lg text-sm font-medium bg-gradient-to-r from-violet-600 to-emerald-600 hover:from-violet-500 hover:to-emerald-500 text-white shadow-lg shadow-violet-500/20 transition-all hover:scale-105 disabled:opacity-50 disabled:pointer-events-none"
                 disabled={extractedShifts.length === 0 || isSaving || saveResult?.success === true}
               >
                 {isSaving ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin inline" />
-                    Salvataggio in corso...
+                    Salvataggio e sincronizzazione in corso...
                   </>
                 ) : (
                   <>
-                    <Save className="mr-2 h-4 w-4 inline" />
-                    Salva nel calendario del sito
-                  </>
-                )}
-              </button>
-
-              <button
-                onClick={handleSyncGoogleCalendar}
-                className="px-5 py-2.5 rounded-lg text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/20 transition-all hover:scale-105 disabled:opacity-50 disabled:pointer-events-none"
-                disabled={extractedShifts.length === 0 || isSaving || saveResult?.success === true}
-              >
-                {isSaving ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin inline" />
-                    Sincronizzazione in corso...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="mr-2 h-4 w-4 inline" />
-                    Sincronizza Google Calendar
+                    <CalendarDays className="mr-2 h-4 w-4 inline" />
+                    Salva e Sincronizza Tutto
                   </>
                 )}
               </button>
